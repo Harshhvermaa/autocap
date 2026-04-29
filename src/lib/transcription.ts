@@ -47,7 +47,11 @@ export async function processAudio(file: File): Promise<CaptionLine[]> {
   const formData = new FormData();
   formData.append('audio', file);
 
-  const response = await fetch('http://localhost:3001/api/transcribe', {
+  const apiBase =
+    (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '';
+  const url = apiBase ? `${apiBase.replace(/\/$/, '')}/api/transcribe` : '/api/transcribe';
+
+  const response = await fetch(url, {
     method: 'POST',
     body: formData,
   });
