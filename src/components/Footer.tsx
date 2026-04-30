@@ -16,7 +16,7 @@ export default function Footer() {
               <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-lg flex items-center justify-center">
                 <Sparkles size={16} className="text-white" />
               </div>
-              <span className="text-white font-semibold">CaptionCraft</span>
+              <span className="text-white font-semibold">Autocap</span>
             </div>
 
             <div className="flex items-center gap-6 text-sm text-slate-400">
@@ -54,7 +54,7 @@ export default function Footer() {
           </div>
 
           <div className="mt-8 pt-8 border-t border-white/5 text-center text-xs text-slate-500">
-            &copy; {new Date().getFullYear()} CaptionCraft. All rights reserved.
+            &copy; {new Date().getFullYear()} Autocap. All rights reserved.
           </div>
         </div>
       </footer>

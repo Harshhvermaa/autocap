@@ -47,7 +47,7 @@ export default function UseCasesSection() {
             Built for creators
           </h2>
           <p className="text-slate-400 mt-4 max-w-lg mx-auto">
-            Whether you are a solo creator or an agency, CaptionCraft fits your workflow.
+            Whether you are a solo creator or an agency, Autocap fits your workflow.
           </p>
         </div>
 

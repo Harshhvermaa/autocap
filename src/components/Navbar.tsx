@@ -16,7 +16,7 @@ export default function Navbar() {
             <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-lg flex items-center justify-center">
               <Sparkles size={16} className="text-white" />
             </div>
-            <span className="text-white font-bold text-lg">CaptionCraft</span>
+            <span className="text-white font-bold text-lg">Autocap</span>
           </a>
 
           <div className="hidden md:flex items-center gap-8 text-sm text-slate-400">

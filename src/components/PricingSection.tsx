@@ -8,7 +8,7 @@ const plans = [
     name: 'Free',
     price: '$0',
     period: 'forever',
-    description: 'Perfect for trying out CaptionCraft',
+    description: 'Perfect for trying out Autocap',
     features: [
       '3 audio files per month',
       'MP3, WAV, M4A support',

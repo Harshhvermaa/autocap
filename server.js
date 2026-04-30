@@ -20,6 +20,8 @@ try {
   });
 } catch (e) {}
 
+const HINGLISH_MODEL = process.env.HINGLISH_MODEL || 'gpt-4.1-mini';
+
 const GLOSSARY_HINT = `Common words that may appear: ice cube, makeup, waxing, skin treatment, peel off, cool, pores, cotton, summer season, long lasting, facial, scrub, massage`;
 
 function normalizeText(text) {
@@ -88,13 +90,13 @@ Task:
 Convert each line into natural Roman Hinglish.
 
 Rules:
-1. Transliterate only.
-2. Do NOT translate.
-3. Do NOT paraphrase.
-4. Do NOT improve grammar.
-5. Do NOT shorten or expand the text.
-6. Keep English words exactly as they are.
-7. Convert Hindi/Urdu words into simple natural Roman script.
+1. Transliterate only. Do NOT translate to English.
+2. Do NOT paraphrase or rewrite sentence structure.
+3. Do NOT improve grammar.
+4. Do NOT shorten or expand the text.
+5. Keep English words exactly as they are.
+6. Convert Hindi/Urdu words into simple natural Roman script (Hinglish).
+7. If the input is already Roman Hinglish, keep it as-is (just normalize spacing).
 8. Preserve product/style/brand words if already in English.
 9. Return exactly one output line for each input line.
 10. Keep the same numbering before |||.
@@ -110,15 +112,31 @@ Examples:
 3|||वैक्सिंग के बाद ice cube use करो
 3|||waxing ke baad ice cube use karo
 
+4|||mainly makeup brushes do types ke hote hain, ek real hair brush aur ek synthetic hair brush
+4|||mainly makeup brushes do types ke hote hain, ek real hair brush aur ek synthetic hair brush
+
 Input lines:
 ${payload}`;
 
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [{ role: 'user', content: prompt }],
-  });
+  let output = '';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const response = await openai.chat.completions.create({
+      model: HINGLISH_MODEL,
+      temperature: 0,
+      messages: [
+        {
+          role: 'user',
+          content:
+            attempt === 0
+              ? prompt
+              : `${prompt}\n\nReminder: Do NOT translate to English. Output ONLY numbered lines in the exact format.`,
+        },
+      ],
+    });
+    output = response.choices[0].message.content?.trim() || '';
+    if (output.includes('|||')) break;
+  }
 
-  const output = response.choices[0].message.content.trim();
   const lines = output.split('\n').map(l => l.trim()).filter(l => l);
 
   const parsed = {};

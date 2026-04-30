@@ -5,7 +5,7 @@ const faqs = [
   {
     question: 'What audio formats are supported?',
     answer:
-      'CaptionCraft supports MP3, WAV, and M4A audio formats. These cover the vast majority of audio files used in content creation, podcasting, and video production.',
+      'Autocap supports MP3, WAV, and M4A audio formats. These cover the vast majority of audio files used in content creation, podcasting, and video production.',
   },
   {
     question: 'What is an SRT file?',
@@ -18,7 +18,7 @@ const faqs = [
       'Our AI engine delivers high-accuracy transcriptions suitable for most professional use cases. Accuracy depends on audio quality, background noise, and speaker clarity. Clean, well-recorded audio typically achieves 95%+ accuracy.',
   },
   {
-    question: 'Do I need to create an account to use CaptionCraft?',
+    question: 'Do I need to create an account to use Autocap?',
     answer:
       'Yes, you need a free account to generate captions. This helps us manage usage limits on the free plan and ensures your generated files are securely associated with your account.',
   },
