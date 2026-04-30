@@ -33,6 +33,27 @@ function hasDevanagari(text) {
   return /[\u0900-\u097F]/.test(text);
 }
 
+function looksMostlyEnglish(text) {
+  if (hasDevanagari(text)) return false;
+  const lower = ` ${text.toLowerCase()} `;
+  const hits = [
+    ' the ',
+    ' and ',
+    ' is ',
+    ' are ',
+    ' of ',
+    ' to ',
+    ' in ',
+    ' for ',
+    ' with ',
+    ' that ',
+    ' this ',
+    ' one ',
+    ' other ',
+  ].reduce((acc, w) => (lower.includes(w) ? acc + 1 : acc), 0);
+  return hits >= 3;
+}
+
 function formatTimestamp(seconds) {
   if (seconds < 0) seconds = 0.0;
   let ms_total = Math.round(seconds * 1000);
@@ -87,55 +108,31 @@ function splitTwoLines(text, maxCharsPerLine = 34) {
 }
 
 async function transliterateBatch(batch) {
-  // If Whisper already gave Roman/English text (no Devanagari), do not call the LLM:
-  // calling the model sometimes "translates" instead of transliterating.
-  const indicesToConvert = [];
-  const numbered = [];
-  for (let i = 0; i < batch.length; i++) {
-    const seg = batch[i];
-    if (hasDevanagari(seg.text)) {
-      indicesToConvert.push(i);
-      numbered.push(`${indicesToConvert.length}|||${seg.text}`);
-    }
-  }
+  // Always convert to Roman Hinglish.
+  // If Whisper produced English-looking text (likely translation), we convert it back to Hinglish.
+  const payload = batch.map((seg, idx) => `${idx + 1}|||${seg.text}`).join('\n');
 
-  if (indicesToConvert.length === 0) {
-    return batch.map((seg) => seg.text);
-  }
-
-  const payload = numbered.join('\n');
-
-  const prompt = `You are a strict subtitle transliterator.
+  const prompt = `You are a strict subtitle converter.
 
 Task:
-Convert each line into natural Roman Hinglish.
+Convert each line into natural Roman Hinglish subtitles (Latin letters).
 
 Rules:
-1. Transliterate only. Do NOT translate to English.
-2. Do NOT paraphrase or rewrite sentence structure.
-3. Do NOT improve grammar.
-4. Do NOT shorten or expand the text.
-5. Keep English words exactly as they are.
-6. Convert Hindi/Urdu words into simple natural Roman script (Hinglish).
-7. If a line is already in Latin script (Roman), keep it EXACTLY as-is (only normalize spacing).
-8. DO NOT translate. If you translate even one line, the output is wrong.
-9. Preserve product/style/brand words if already in English.
-10. Return exactly one output line for each input line.
-11. Keep the same numbering before |||.
-12. Output only plain text in this exact format: number|||converted text.
+1) Output MUST be Roman Hinglish (Latin letters). Never output Devanagari.
+2) If the input contains Hindi in Devanagari, transliterate it (do NOT translate to English).
+3) If the input is English (or English-heavy), convert it into natural Roman Hinglish while preserving meaning.
+4) Keep English brand/product terms as-is (e.g., makeup, brush, pores, ice cube).
+5) Do NOT add new information. Do NOT summarize.
+6) Return exactly one output line for each input line.
+7) Keep the same numbering before |||.
+8) Output only plain text lines in the exact format: number|||converted text.
 
 Examples:
 1|||आज हम एक नई app के बारे में बात करेंगे
 1|||aaj hum ek nayi app ke baare mein baat karenge
 
-2|||इससे हमारे pores close हो जाएंगे
-2|||isse hamare pores close ho jayenge
-
-3|||वैक्सिंग के बाद ice cube use करो
-3|||waxing ke baad ice cube use karo
-
-4|||mainly makeup brushes do types ke hote hain, ek real hair brush aur ek synthetic hair brush
-4|||mainly makeup brushes do types ke hote hain, ek real hair brush aur ek synthetic hair brush
+2|||Mainly makeup brushes are of two types. One is real hair brush and the other is synthetic hair brush.
+2|||mainly makeup brushes do types ke hote hain. ek real hair brush hota hai aur dusra synthetic hair brush hota hai.
 
 Input lines:
 ${payload}`;
@@ -172,12 +169,7 @@ ${payload}`;
     }
   }
 
-  const out = batch.map((seg) => seg.text);
-  for (let i = 0; i < indicesToConvert.length; i++) {
-    const originalIndex = indicesToConvert[i];
-    out[originalIndex] = parsed[i + 1] || batch[originalIndex].text;
-  }
-  return out;
+  return batch.map((seg, idx) => parsed[idx + 1] || seg.text);
 }
 
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
@@ -221,8 +213,12 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
       (acc, s) => acc + (hasDevanagari(s.text) ? 1 : 0),
       0,
     );
+    const mostlyEnglishCount = segments.reduce(
+      (acc, s) => acc + (looksMostlyEnglish(s.text) ? 1 : 0),
+      0,
+    );
     console.log(
-      `[transcribe] build=${SERVER_BUILD} segments=${segments.length} devanagari=${devanagariCount} model=${HINGLISH_MODEL}`,
+      `[transcribe] build=${SERVER_BUILD} segments=${segments.length} devanagari=${devanagariCount} mostlyEnglish=${mostlyEnglishCount} model=${HINGLISH_MODEL}`,
     );
 
     // Step 2: Convert to Hinglish
