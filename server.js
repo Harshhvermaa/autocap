@@ -21,6 +21,7 @@ try {
 } catch (e) {}
 
 const HINGLISH_MODEL = process.env.HINGLISH_MODEL || 'gpt-4.1-mini';
+const SERVER_BUILD = process.env.SERVER_BUILD || '2026-04-30';
 
 const GLOSSARY_HINT = `Common words that may appear: ice cube, makeup, waxing, skin treatment, peel off, cool, pores, cotton, summer season, long lasting, facial, scrub, massage`;
 
@@ -200,7 +201,7 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
       model: 'whisper-1',
       file: fs.createReadStream(audioPath),
       language: 'hi',
-      prompt: `This audio is mostly Hindi/Hinglish in informal spoken style. Write Hindi words in Devanagari script (हिन्दी) where possible. Keep English words, product names, and common beauty/skincare terms as spoken. Prefer words like: ${GLOSSARY_HINT}`,
+      prompt: `Transcribe (do NOT translate) this audio. It is mostly Hindi/Hinglish in informal spoken style. Write Hindi words in Devanagari script (हिन्दी) where possible. Keep English words, product names, and common beauty/skincare terms as spoken. Prefer words like: ${GLOSSARY_HINT}`,
       response_format: 'verbose_json',
       timestamp_granularities: ['segment'],
       temperature: 0,
@@ -215,6 +216,14 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
         segments.push({ start: seg.start, end: seg.end, text });
       }
     }
+
+    const devanagariCount = segments.reduce(
+      (acc, s) => acc + (hasDevanagari(s.text) ? 1 : 0),
+      0,
+    );
+    console.log(
+      `[transcribe] build=${SERVER_BUILD} segments=${segments.length} devanagari=${devanagariCount} model=${HINGLISH_MODEL}`,
+    );
 
     // Step 2: Convert to Hinglish
     const batchSize = 20;
@@ -261,5 +270,5 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`Backend running on port ${PORT}`);
+  console.log(`Backend running on port ${PORT} (build=${SERVER_BUILD}, model=${HINGLISH_MODEL})`);
 });
