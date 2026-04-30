@@ -28,6 +28,10 @@ function normalizeText(text) {
   return text.trim().replace(/\s+/g, ' ');
 }
 
+function hasDevanagari(text) {
+  return /[\u0900-\u097F]/.test(text);
+}
+
 function formatTimestamp(seconds) {
   if (seconds < 0) seconds = 0.0;
   let ms_total = Math.round(seconds * 1000);
@@ -82,7 +86,23 @@ function splitTwoLines(text, maxCharsPerLine = 34) {
 }
 
 async function transliterateBatch(batch) {
-  const payload = batch.map((seg, idx) => `${idx + 1}|||${seg.text}`).join('\n');
+  // If Whisper already gave Roman/English text (no Devanagari), do not call the LLM:
+  // calling the model sometimes "translates" instead of transliterating.
+  const indicesToConvert = [];
+  const numbered = [];
+  for (let i = 0; i < batch.length; i++) {
+    const seg = batch[i];
+    if (hasDevanagari(seg.text)) {
+      indicesToConvert.push(i);
+      numbered.push(`${indicesToConvert.length}|||${seg.text}`);
+    }
+  }
+
+  if (indicesToConvert.length === 0) {
+    return batch.map((seg) => seg.text);
+  }
+
+  const payload = numbered.join('\n');
 
   const prompt = `You are a strict subtitle transliterator.
 
@@ -96,11 +116,12 @@ Rules:
 4. Do NOT shorten or expand the text.
 5. Keep English words exactly as they are.
 6. Convert Hindi/Urdu words into simple natural Roman script (Hinglish).
-7. If the input is already Roman Hinglish, keep it as-is (just normalize spacing).
-8. Preserve product/style/brand words if already in English.
-9. Return exactly one output line for each input line.
-10. Keep the same numbering before |||.
-11. Output only plain text in this exact format: number|||converted text.
+7. If a line is already in Latin script (Roman), keep it EXACTLY as-is (only normalize spacing).
+8. DO NOT translate. If you translate even one line, the output is wrong.
+9. Preserve product/style/brand words if already in English.
+10. Return exactly one output line for each input line.
+11. Keep the same numbering before |||.
+12. Output only plain text in this exact format: number|||converted text.
 
 Examples:
 1|||आज हम एक नई app के बारे में बात करेंगे
@@ -150,7 +171,12 @@ ${payload}`;
     }
   }
 
-  return batch.map((seg, idx) => parsed[idx + 1] || seg.text);
+  const out = batch.map((seg) => seg.text);
+  for (let i = 0; i < indicesToConvert.length; i++) {
+    const originalIndex = indicesToConvert[i];
+    out[originalIndex] = parsed[i + 1] || batch[originalIndex].text;
+  }
+  return out;
 }
 
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
@@ -174,7 +200,7 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
       model: 'whisper-1',
       file: fs.createReadStream(audioPath),
       language: 'hi',
-      prompt: `This audio is mostly Hindi/Hinglish in informal spoken style. Keep English words, product names, and common beauty/skincare terms as spoken. Prefer words like: ${GLOSSARY_HINT}`,
+      prompt: `This audio is mostly Hindi/Hinglish in informal spoken style. Write Hindi words in Devanagari script (हिन्दी) where possible. Keep English words, product names, and common beauty/skincare terms as spoken. Prefer words like: ${GLOSSARY_HINT}`,
       response_format: 'verbose_json',
       timestamp_granularities: ['segment'],
       temperature: 0,
