@@ -18,18 +18,6 @@ import {
 const ACCEPTED_FORMATS = ['.mp3', '.wav', '.m4a'];
 type Screen = 'upload' | 'processing' | 'results';
 
-function wrapWordsPerLine(text: string, wordsPerLine: number | null) {
-  const trimmed = text.trim();
-  if (!trimmed) return '';
-  if (!wordsPerLine || wordsPerLine <= 0) return trimmed;
-  const words = trimmed.split(/\s+/);
-  const lines: string[] = [];
-  for (let i = 0; i < words.length; i += wordsPerLine) {
-    lines.push(words.slice(i, i + wordsPerLine).join(' '));
-  }
-  return lines.join('\n');
-}
-
 export default function HeroSection() {
   const { user } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -39,7 +27,6 @@ export default function HeroSection() {
   const [captions, setCaptions] = useState<CaptionLine[] | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [screen, setScreen] = useState<Screen>('upload');
-  const [wordsPerLine, setWordsPerLine] = useState<number | null>(6);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (selectedFile: File) => {
@@ -103,11 +90,7 @@ export default function HeroSection() {
   const handleDownload = () => {
     if (!captions) return;
     const baseName = file?.name.replace(/\.[^.]+$/, '') ?? 'captions';
-    const exportCaptions = captions.map((c) => ({
-      ...c,
-      text: wrapWordsPerLine(c.text, wordsPerLine),
-    }));
-    downloadSRT(exportCaptions, `${baseName}.srt`);
+    downloadSRT(captions, `${baseName}.srt`);
   };
 
   const updateCaptionText = (id: number, text: string) => {
@@ -375,24 +358,6 @@ export default function HeroSection() {
                   </div>
 
                   <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-                    <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-sm">
-                      <span className="text-slate-300">Words / line</span>
-                      <select
-                        value={wordsPerLine ?? 'off'}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setWordsPerLine(val === 'off' ? null : Number(val));
-                        }}
-                        className="bg-transparent text-white outline-none"
-                      >
-                        <option value="off">Off</option>
-                        {[3, 4, 5, 6, 7, 8, 10].map((n) => (
-                          <option key={n} value={n}>
-                            {n}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
                     <button
                       onClick={handleDownload}
                       className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-emerald-500/25 transition-all duration-300 flex items-center justify-center gap-2"
@@ -432,14 +397,6 @@ export default function HeroSection() {
                         className="mt-3 w-full bg-transparent text-slate-200 placeholder:text-slate-500 text-sm outline-none border border-white/10 rounded-lg px-3 py-2 focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20 resize-y"
                         placeholder="Caption text…"
                       />
-                      {wordsPerLine && (
-                        <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
-                          <p className="text-xs text-slate-400 mb-1">Preview</p>
-                          <pre className="text-slate-200 text-sm whitespace-pre-wrap leading-relaxed">
-                            {wrapWordsPerLine(c.text, wordsPerLine)}
-                          </pre>
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
