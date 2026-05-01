@@ -3,407 +3,286 @@ import { useAuth } from '../hooks/useAuth';
 import { processAudio, downloadSRT, type CaptionLine } from '../lib/transcription';
 import AuthModal from './AuthModal';
 import {
-  Upload,
-  FileAudio,
-  Download,
-  Loader2,
-  CheckCircle2,
-  X,
-  Sparkles,
-  Wand2,
-  PencilLine,
-  ArrowRight,
+  Upload, FileAudio, Download, Loader2, X, Sparkles,
+  Wand2, PencilLine, ArrowRight, Mic, Zap,
 } from 'lucide-react';
 
 const ACCEPTED_FORMATS = ['.mp3', '.wav', '.m4a'];
 type Screen = 'upload' | 'processing' | 'results';
+type HeroSectionProps = { screen: Screen; onScreenChange: (screen: Screen) => void };
 
-export default function HeroSection() {
+function parseSrtTimestamp(ts: string): number {
+  const m = ts.match(/^(\d{2}):(\d{2}):(\d{2}),(\d{3})$/);
+  if (!m) return 0;
+  return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) + Number(m[4]) / 1000;
+}
+
+function formatSrtTimestamp(seconds: number): string {
+  const s = Math.max(0, seconds);
+  const ms = Math.round(s * 1000);
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  const sec = Math.floor((ms % 60000) / 1000);
+  const mil = ms % 1000;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')},${String(mil).padStart(3,'0')}`;
+}
+
+function splitCaptionByWords(caption: CaptionLine, wpb: number): CaptionLine[] {
+  const cleaned = caption.text.replace(/\n+/g,' ').trim().replace(/\s+/g,' ');
+  if (!cleaned) return [];
+  const words = cleaned.split(' ').filter(Boolean);
+  if (words.length <= wpb) return [{ ...caption, text: cleaned }];
+  const startSec = parseSrtTimestamp(caption.startTime);
+  const endSec = parseSrtTimestamp(caption.endTime);
+  const dur = Math.max(0.001, endSec - startSec);
+  const blocks: CaptionLine[] = [];
+  for (let i = 0; i < words.length; i += wpb) {
+    const chunk = words.slice(i, i + wpb);
+    const cs = startSec + (dur * i) / words.length;
+    const ce = i + wpb >= words.length ? endSec : startSec + (dur * (i + chunk.length)) / words.length;
+    blocks.push({ ...caption, id: 0, startTime: formatSrtTimestamp(Math.min(cs, endSec - 0.001)), endTime: formatSrtTimestamp(Math.max(cs + 0.001, Math.min(ce, endSec))), text: chunk.join(' ') });
+  }
+  return blocks;
+}
+
+function splitCaptionsByWords(captions: CaptionLine[], wpb: number) {
+  const next: CaptionLine[] = [];
+  for (const c of captions) next.push(...splitCaptionByWords(c, wpb));
+  return next.map((c, idx) => ({ ...c, id: idx + 1 }));
+}
+
+export default function HeroSection({ screen, onScreenChange }: HeroSectionProps) {
   const { user } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [captions, setCaptions] = useState<CaptionLine[] | null>(null);
+  const [originalCaptions, setOriginalCaptions] = useState<CaptionLine[] | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [screen, setScreen] = useState<Screen>('upload');
+  const [splitWordsPerBlock, setSplitWordsPerBlock] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const setScreenSafe = (next: Screen) => onScreenChange(next);
 
   const handleFileSelect = (selectedFile: File) => {
     const ext = '.' + selectedFile.name.split('.').pop()?.toLowerCase();
-    if (!ACCEPTED_FORMATS.includes(ext)) {
-      alert('Unsupported format. Please upload MP3, WAV, or M4A files.');
-      return;
-    }
-    setFile(selectedFile);
-    setCaptions(null);
-    setScreen('upload');
+    if (!ACCEPTED_FORMATS.includes(ext)) { alert('Please upload MP3, WAV, or M4A files.'); return; }
+    setFile(selectedFile); setCaptions(null); setError(null); setScreenSafe('upload');
   };
 
   const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile) handleFileSelect(droppedFile);
+    e.preventDefault(); setDragOver(false);
+    const f = e.dataTransfer.files[0]; if (f) handleFileSelect(f);
   };
 
   const handleGenerate = async () => {
-    if (!user) {
-      setAuthModalOpen(true);
-      return;
-    }
+    if (!user) { setAuthModalOpen(true); return; }
     if (!file) return;
-
-    setProcessing(true);
-    setScreen('processing');
-    setProgress(0);
-
-    // Simulate upload progress
-    const progressInterval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 90) {
-          clearInterval(progressInterval);
-          return 90;
-        }
-        return prev + Math.random() * 15;
-      });
-    }, 200);
-
+    setProcessing(true); setScreenSafe('processing'); setProgress(0); setError(null);
+    const iv = setInterval(() => setProgress((p) => { if (p >= 90) { clearInterval(iv); return 90; } return p + Math.random() * 15; }), 200);
     try {
       const result = await processAudio(file);
-      clearInterval(progressInterval);
-      setProgress(100);
-      setTimeout(() => {
-        setCaptions(result);
-        setProcessing(false);
-        setProgress(0);
-        setScreen('results');
-      }, 400);
-    } catch {
-      clearInterval(progressInterval);
-      setProcessing(false);
-      setProgress(0);
-      setScreen('upload');
+      clearInterval(iv); setProgress(100);
+      setTimeout(() => { setOriginalCaptions(result); setCaptions(result); setProcessing(false); setProgress(0); setScreenSafe('results'); }, 400);
+    } catch (err: unknown) {
+      clearInterval(iv); setProcessing(false); setProgress(0);
+      setError(err instanceof Error ? err.message : 'Something went wrong.');
+      setScreenSafe('upload');
     }
   };
 
-  const handleDownload = () => {
-    if (!captions) return;
-    const baseName = file?.name.replace(/\.[^.]+$/, '') ?? 'captions';
-    downloadSRT(captions, `${baseName}.srt`);
-  };
-
-  const updateCaptionText = (id: number, text: string) => {
-    setCaptions((prev) => {
-      if (!prev) return prev;
-      return prev.map((line) => (line.id === id ? { ...line, text } : line));
-    });
-  };
-
-  const reset = () => {
-    setFile(null);
-    setCaptions(null);
-    setProcessing(false);
-    setProgress(0);
-    setScreen('upload');
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
+  const handleDownload = () => { if (!captions) return; downloadSRT(captions, `${file?.name.replace(/\.[^.]+$/, '') ?? 'captions'}.srt`); };
+  const applyWordSplit = () => { if (captions && splitWordsPerBlock) setCaptions(splitCaptionsByWords(captions, splitWordsPerBlock)); };
+  const restoreOriginal = () => { if (originalCaptions) setCaptions(originalCaptions); };
+  const updateCaptionText = (id: number, text: string) => setCaptions((prev) => prev ? prev.map((l) => l.id === id ? { ...l, text } : l) : prev);
+  const reset = () => { setFile(null); setCaptions(null); setOriginalCaptions(null); setProcessing(false); setProgress(0); setError(null); setScreenSafe('upload'); setSplitWordsPerBlock(null); if (fileInputRef.current) fileInputRef.current.value = ''; };
 
   return (
-    <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(59,130,246,0.15),_transparent_50%)]" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_rgba(6,182,212,0.1),_transparent_50%)]" />
+    <section className={`relative overflow-hidden ${screen === 'results' ? 'h-screen pt-20 pb-6' : 'min-h-screen flex items-center pt-16'}`}>
+      {/* BG */}
+      <div className="absolute inset-0 bg-[#08080d]" />
+      <div className="absolute top-[-25%] left-[-10%] w-[700px] h-[700px] rounded-full bg-violet-600/15 blur-[140px] animate-float" />
+      <div className="absolute bottom-[-15%] right-[-5%] w-[500px] h-[500px] rounded-full bg-blue-500/10 blur-[100px] animate-float-delayed" />
+      <div className="absolute inset-0 noise-bg" />
 
-      {/* Grid pattern */}
-      <div
-        className="absolute inset-0 opacity-[0.03]"
-        style={{
-          backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`,
-          backgroundSize: '60px 60px',
-        }}
-      />
+      <div className={`relative z-10 w-full ${screen === 'results' ? 'px-6 sm:px-10 lg:px-14 pt-4' : 'px-6 sm:px-10 lg:px-16 py-12'}`}>
 
-      <div
-        className={`relative z-10 max-w-4xl mx-auto px-4 sm:px-6 text-center ${
-          screen === 'processing' ? 'py-10' : 'py-20'
-        }`}
-      >
+        {/* ═══ UPLOAD — Left/Right Split ═══ */}
         {screen === 'upload' && (
-          <>
-            {/* Badge */}
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/5 border border-white/10 rounded-full text-sm text-blue-300 mb-8 backdrop-blur-sm">
-              <Sparkles size={14} />
-              AI-Powered Caption Generation
+          <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-12 lg:gap-20 items-center min-h-[70vh]">
+            {/* LEFT — Text */}
+            <div className="animate-fade-up">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/[0.05] border border-white/[0.08] rounded-full text-sm text-violet-300 mb-6">
+                <Sparkles size={14} />
+                AI-Powered Captions
+              </div>
+
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-[1.08] tracking-tight mb-5">
+                Audio to
+                <br />
+                <span className="bg-gradient-to-r from-violet-400 via-blue-400 to-cyan-400 bg-clip-text text-transparent">
+                  captions,
+                </span>
+                <br />
+                instantly.
+              </h1>
+
+              <p className="text-lg text-white/40 max-w-md mb-8 leading-relaxed">
+                Upload any audio file and get perfectly timed SRT subtitles in seconds. Hindi, English, or Hinglish — we handle it all.
+              </p>
+
+              <div className="flex flex-wrap items-center gap-6 text-sm text-white/25">
+                <span className="flex items-center gap-2"><Zap size={16} className="text-violet-400/60" /> Fast processing</span>
+                <span className="flex items-center gap-2"><Mic size={16} className="text-blue-400/60" /> Hindi + English</span>
+                <span className="flex items-center gap-2"><Download size={16} className="text-cyan-400/60" /> SRT export</span>
+              </div>
             </div>
 
-            {/* Headline */}
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-[1.1] tracking-tight mb-6">
-              Generate Captions from
-              <br />
-              <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-                Audio in Seconds
-              </span>
-            </h1>
-
-            {/* Subheadline */}
-            <p className="text-lg sm:text-xl text-slate-400 max-w-2xl mx-auto mb-12 leading-relaxed">
-              Upload your audio and get accurate SRT subtitles instantly. No manual transcription needed.
-            </p>
-          </>
-        )}
-
-        {/* Upload + Processing + Results */}
-        <div className="max-w-3xl mx-auto">
-          {screen === 'upload' && (
-            <div
-              className={`relative rounded-2xl border-2 border-dashed transition-all duration-300 ${
-                dragOver
-                  ? 'border-blue-400 bg-blue-500/10'
-                  : file
-                  ? 'border-cyan-500/50 bg-cyan-500/5'
-                  : 'border-white/15 bg-white/5 hover:border-white/25 hover:bg-white/[0.07]'
-              } backdrop-blur-sm p-8`}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragOver(true);
-              }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={handleDrop}
-            >
-              {file ? (
-                <div className="flex items-center justify-center gap-4">
-                  <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center">
-                    <FileAudio size={24} className="text-blue-400" />
-                  </div>
-                  <div className="text-left">
-                    <p className="text-white font-medium text-sm">{file.name}</p>
-                    <p className="text-slate-400 text-xs mt-0.5">
-                      {(file.size / (1024 * 1024)).toFixed(2)} MB
-                    </p>
-                  </div>
-                  <button
-                    onClick={reset}
-                    className="ml-2 text-slate-400 hover:text-white transition-colors"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-4">
-                  <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center border border-white/10">
-                    <Upload size={28} className="text-blue-400" />
-                  </div>
-                  <div>
-                    <p className="text-white font-medium">
-                      Drop your audio file here
-                    </p>
-                    <p className="text-slate-400 text-sm mt-1">
-                      or{' '}
-                      <button
-                        onClick={() => fileInputRef.current?.click()}
-                        className="text-blue-400 hover:text-blue-300 underline underline-offset-2 transition-colors"
-                      >
-                        browse files
-                      </button>
-                    </p>
-                  </div>
-                  <div className="flex gap-2 mt-1">
-                    {['MP3', 'WAV', 'M4A'].map((fmt) => (
-                      <span
-                        key={fmt}
-                        className="px-2.5 py-1 bg-white/5 border border-white/10 rounded-md text-xs text-slate-400"
-                      >
-                        {fmt}
-                      </span>
-                    ))}
-                  </div>
+            {/* RIGHT — Upload Card */}
+            <div className="animate-fade-up" style={{ animationDelay: '0.15s' }}>
+              {error && (
+                <div className="mb-5 px-5 py-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
+                  {error}
                 </div>
               )}
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept={ACCEPTED_FORMATS.join(',')}
-                className="hidden"
-                onChange={(e) => {
-                  const selected = e.target.files?.[0];
-                  if (selected) handleFileSelect(selected);
-                }}
-              />
-            </div>
-          )}
-
-          {screen === 'upload' && (
-            <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
-              <button
-                onClick={handleGenerate}
-                disabled={!file || processing}
-                className="w-full sm:w-auto px-8 py-3.5 bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              <div
+                className={`rounded-3xl border-2 border-dashed transition-all duration-300 ${
+                  dragOver ? 'border-violet-400 bg-violet-500/10'
+                  : file ? 'border-cyan-400/30 bg-white/[0.04]'
+                  : 'border-white/[0.08] bg-white/[0.025] hover:border-white/15 hover:bg-white/[0.04]'
+                } p-8 sm:p-10`}
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={handleDrop}
               >
-                {processing ? (
-                  <>
-                    <Loader2 size={18} className="animate-spin" />
-                    Processing...
-                  </>
+                {file ? (
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 bg-gradient-to-br from-violet-500/20 to-blue-500/20 rounded-2xl flex items-center justify-center shrink-0 border border-white/[0.06]">
+                      <FileAudio size={24} className="text-violet-300" />
+                    </div>
+                    <div className="text-left min-w-0 flex-1">
+                      <p className="text-white font-semibold text-base truncate">{file.name}</p>
+                      <p className="text-white/30 text-sm mt-1">{(file.size / (1024 * 1024)).toFixed(2)} MB · Ready</p>
+                    </div>
+                    <button onClick={reset} className="text-white/25 hover:text-white transition-colors p-2"><X size={20} /></button>
+                  </div>
                 ) : (
-                  <>
-                    <Sparkles size={18} />
-                    Generate SRT
-                  </>
+                  <button onClick={() => fileInputRef.current?.click()} className="w-full flex flex-col items-center gap-5 py-6 cursor-pointer">
+                    <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
+                      <Upload size={28} className="text-white/35" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-white/70 font-semibold text-lg">Drop your audio file here</p>
+                      <p className="text-white/30 text-sm mt-2">
+                        or <span className="text-violet-400 underline underline-offset-2">browse files</span>
+                      </p>
+                    </div>
+                    <div className="flex gap-2 mt-1">
+                      {['MP3', 'WAV', 'M4A'].map((f) => (
+                        <span key={f} className="px-3 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-white/30 text-xs font-medium">{f}</span>
+                      ))}
+                    </div>
+                  </button>
                 )}
-              </button>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={processing}
-                className="w-full sm:w-auto px-8 py-3.5 bg-white/5 border border-white/15 text-white font-medium rounded-xl hover:bg-white/10 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Choose another file
-              </button>
+
+                <input ref={fileInputRef} type="file" accept={ACCEPTED_FORMATS.join(',')} className="hidden"
+                  onChange={(e) => { const s = e.target.files?.[0]; if (s) handleFileSelect(s); }} />
+              </div>
+
+              {/* Buttons */}
+              <div className="mt-6 flex flex-col sm:flex-row gap-3">
+                <button onClick={handleGenerate} disabled={!file || processing}
+                  className="flex-1 px-8 py-4 bg-gradient-to-r from-violet-600 to-blue-500 text-white font-bold rounded-2xl text-base hover:shadow-xl hover:shadow-violet-500/20 transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2.5">
+                  {processing ? (<><Loader2 size={20} className="animate-spin" /> Processing…</>) : (<><Sparkles size={20} /> Generate Captions</>)}
+                </button>
+                {file && (
+                  <button onClick={() => fileInputRef.current?.click()} disabled={processing}
+                    className="px-6 py-4 bg-white/[0.04] border border-white/10 text-white/60 font-semibold rounded-2xl text-base hover:bg-white/[0.08] transition-all disabled:opacity-30 disabled:cursor-not-allowed">
+                    Change
+                  </button>
+                )}
+              </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {screen === 'processing' && (
-            <div className="min-h-[75vh] flex items-center">
-              <div className="w-full rounded-3xl border border-white/10 bg-white/[0.03] backdrop-blur-xl p-8 sm:p-10 text-left">
-                <div className="flex items-start justify-between gap-6">
-                  <div>
-                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/5 border border-white/10 rounded-full text-xs text-blue-200">
-                      <Wand2 size={14} />
-                      AI Processing
-                    </div>
-                    <h2 className="mt-4 text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                      Generating captions…
-                    </h2>
-                    <p className="mt-2 text-slate-400 text-sm sm:text-base">
-                      {progress < 50
-                        ? 'Uploading your audio securely.'
-                        : 'Transcribing speech and aligning timestamps.'}
-                    </p>
-                  </div>
-
-                  <div className="hidden sm:block relative w-24 h-24">
-                    <div className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500/30 to-cyan-500/10 blur-xl" />
-                    <div className="absolute inset-0 rounded-full border border-white/10 bg-white/[0.03] backdrop-blur-sm" />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Loader2 size={28} className="text-blue-300 animate-spin" />
-                    </div>
-                  </div>
+        {/* ═══ PROCESSING ═══ */}
+        {screen === 'processing' && (
+          <div className="min-h-[75vh] flex items-center justify-center">
+            <div className="max-w-lg mx-auto text-center">
+              <div className="relative w-32 h-32 mx-auto mb-10">
+                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-violet-500/40 to-blue-500/20 blur-3xl animate-pulse-glow" />
+                <div className="absolute inset-3 rounded-full bg-[#08080d] border border-white/10" />
+                <div className="absolute inset-0 flex items-center justify-center"><Loader2 size={36} className="text-violet-300 animate-spin" /></div>
+              </div>
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/5 border border-white/10 rounded-full text-sm text-violet-200 mb-5"><Wand2 size={14} /> AI Processing</div>
+              <h2 className="text-3xl font-bold text-white mb-3">Generating captions…</h2>
+              <p className="text-white/35 text-base mb-10">{progress < 50 ? 'Uploading and analyzing audio.' : 'Transcribing and aligning timestamps.'}</p>
+              <div className="max-w-sm mx-auto">
+                <div className="h-2 bg-white/[0.06] rounded-full overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-violet-500 to-blue-400 rounded-full transition-all duration-300" style={{ width: `${Math.min(progress, 100)}%` }} />
                 </div>
-
-                <div className="mt-8">
-                  <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full transition-all duration-300 ease-out"
-                      style={{ width: `${Math.min(progress, 100)}%` }}
-                    />
-                  </div>
-                  <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
-                    <span>{Math.round(Math.min(progress, 100))}%</span>
-                    <span className="inline-flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80" />
-                      Neural engine online
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-8 grid gap-3 sm:grid-cols-3">
-                  {[
-                    { title: 'Upload', desc: 'Chunking audio stream' },
-                    { title: 'Transcribe', desc: 'Speech → text' },
-                    { title: 'Align', desc: 'Timestamps → captions' },
-                  ].map((step) => (
-                    <div
-                      key={step.title}
-                      className="rounded-2xl border border-white/10 bg-white/[0.02] p-4"
-                    >
-                      <p className="text-white text-sm font-semibold">{step.title}</p>
-                      <p className="text-slate-400 text-xs mt-1">{step.desc}</p>
-                    </div>
-                  ))}
+                <div className="mt-3 flex justify-between text-sm text-white/25">
+                  <span>{Math.round(Math.min(progress, 100))}%</span>
+                  <span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-400/70 animate-pulse" /> Active</span>
                 </div>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {screen === 'results' && captions && (
-            <div className="text-left">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/5 border border-white/10 rounded-full text-sm text-emerald-300 mb-8 backdrop-blur-sm">
-                <CheckCircle2 size={14} />
-                Captions ready
-              </div>
+        {/* ═══ RESULTS ═══ */}
+        {screen === 'results' && captions && (
+          <div className="text-center">
+            <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight mt-1">Review & download your SRT</h1>
+            <p className="mt-3 text-white/35 max-w-2xl mx-auto">Edit any line before downloading.</p>
 
-              <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
-                Review & download your SRT
-              </h1>
-              <p className="mt-3 text-slate-400 max-w-2xl">
-                Edit any line before downloading. Changes apply to the exported `.srt` file.
-              </p>
-
-              <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl overflow-hidden">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-6 py-4 border-b border-white/10 bg-white/[0.02]">
+            <div className="mt-6 w-full text-left rounded-2xl border border-white/10 bg-white/95 shadow-2xl overflow-hidden flex flex-col h-[calc(100vh-220px)]">
+              <div className="px-6 py-5 border-b border-slate-200/70">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-white/10 flex items-center justify-center">
-                      <FileAudio size={18} className="text-blue-300" />
-                    </div>
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-600 to-blue-500 flex items-center justify-center shadow-md"><FileAudio size={20} className="text-white" /></div>
                     <div>
-                      <p className="text-white text-sm font-semibold">
-                        {file?.name ?? 'Audio'}
-                      </p>
-                      <p className="text-slate-400 text-xs">
-                        {captions.length} caption lines
-                      </p>
+                      <p className="text-slate-900 text-sm font-semibold">{file?.name ?? 'Audio'}</p>
+                      <p className="text-slate-500 text-xs">{captions.length} caption lines</p>
                     </div>
                   </div>
-
-                  <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-                    <button
-                      onClick={handleDownload}
-                      className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-emerald-500/25 transition-all duration-300 flex items-center justify-center gap-2"
-                    >
-                      <Download size={18} />
-                      Download .SRT
-                    </button>
-                    <button
-                      onClick={reset}
-                      className="w-full sm:w-auto px-6 py-3 bg-white/5 border border-white/15 text-white font-medium rounded-xl hover:bg-white/10 transition-all duration-300 flex items-center justify-center gap-2"
-                    >
-                      Upload another
-                      <ArrowRight size={16} />
-                    </button>
+                  <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:items-center">
+                    <label className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm min-w-[220px]">
+                      <span className="text-slate-600">Split (words)</span>
+                      <select value={splitWordsPerBlock ?? 'off'} onChange={(e) => setSplitWordsPerBlock(e.target.value === 'off' ? null : Number(e.target.value))} className="bg-transparent text-slate-900 outline-none">
+                        <option value="off">Off</option>
+                        {[3,4,5,6,7,8,10,12].map((n) => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </label>
+                    <button onClick={applyWordSplit} disabled={!splitWordsPerBlock} className="px-5 py-3 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100 transition-colors disabled:opacity-50 text-sm">Apply</button>
+                    <button onClick={restoreOriginal} disabled={!originalCaptions} className="px-5 py-3 rounded-xl border border-slate-200 bg-white text-slate-700 font-semibold hover:bg-slate-50 transition-colors disabled:opacity-50 text-sm">Restore</button>
+                    <button onClick={handleDownload} className="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-semibold hover:shadow-lg transition-all flex items-center gap-2 text-sm"><Download size={16} /> Download .SRT</button>
+                    <button onClick={reset} className="px-6 py-3 rounded-xl border border-slate-200 bg-white text-slate-700 font-semibold hover:bg-slate-50 transition-colors flex items-center gap-2 text-sm">New file <ArrowRight size={14} /></button>
                   </div>
                 </div>
-
+              </div>
+              <div className="flex-1 overflow-y-auto custom-scrollbar">
                 <div className="p-4 sm:p-6 space-y-3">
                   {captions.map((c) => (
-                    <div
-                      key={c.id}
-                      className="rounded-xl border border-white/10 bg-white/[0.02] p-4"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                        <div className="text-xs text-slate-400 font-mono">
-                          {c.startTime} → {c.endTime}
-                        </div>
-                        <div className="inline-flex items-center gap-2 text-xs text-blue-200">
-                          <PencilLine size={14} />
-                          Edit
-                        </div>
+                    <div key={c.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 sm:px-5">
+                      <div className="grid grid-cols-1 sm:grid-cols-[64px_220px_1fr_auto] lg:grid-cols-[64px_260px_1fr_auto] gap-3 sm:items-center">
+                        <div className="w-12 h-10 rounded-xl bg-violet-50 border border-violet-100 flex items-center justify-center text-violet-700 font-bold text-sm">{c.id}</div>
+                        <div className="text-xs text-slate-600 font-mono">{c.startTime} → {c.endTime}</div>
+                        <textarea value={c.text} onChange={(e) => updateCaptionText(c.id, e.target.value)} rows={2}
+                          className="w-full min-h-[48px] bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-slate-900 text-sm leading-6 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20 resize-y" placeholder="Caption text…" />
+                        <div className="inline-flex items-center gap-2 text-sm text-violet-600 justify-self-start sm:justify-self-end select-none"><PencilLine size={16} /> Edit</div>
                       </div>
-                      <textarea
-                        value={c.text}
-                        onChange={(e) => updateCaptionText(c.id, e.target.value)}
-                        rows={2}
-                        className="mt-3 w-full bg-transparent text-slate-200 placeholder:text-slate-500 text-sm outline-none border border-white/10 rounded-lg px-3 py-2 focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20 resize-y"
-                        placeholder="Caption text…"
-                      />
                     </div>
                   ))}
                 </div>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />

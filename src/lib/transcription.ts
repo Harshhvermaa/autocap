@@ -5,6 +5,59 @@ export interface CaptionLine {
   text: string;
 }
 
+function parseSrtTimestamp(ts: string): number {
+  const m = ts.match(/^(\d{2}):(\d{2}):(\d{2}),(\d{3})$/);
+  if (!m) return 0;
+  const hours = Number(m[1]);
+  const minutes = Number(m[2]);
+  const seconds = Number(m[3]);
+  const millis = Number(m[4]);
+  return hours * 3600 + minutes * 60 + seconds + millis / 1000;
+}
+
+function formatSrtTimestamp(seconds: number): string {
+  const safe = Math.max(0, seconds);
+  const msTotal = Math.round(safe * 1000);
+  const hours = Math.floor(msTotal / 3600000);
+  const remainingAfterHours = msTotal % 3600000;
+  const minutes = Math.floor(remainingAfterHours / 60000);
+  const remainingAfterMinutes = remainingAfterHours % 60000;
+  const secs = Math.floor(remainingAfterMinutes / 1000);
+  const millis = remainingAfterMinutes % 1000;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(
+    2,
+    '0',
+  )}:${String(secs).padStart(2, '0')},${String(millis).padStart(3, '0')}`;
+}
+
+export function normalizeCaptionsForSrt(
+  captions: CaptionLine[],
+  gapSeconds = 0.06,
+  minDurationSeconds = 0.6,
+): CaptionLine[] {
+  const sorted = [...captions].sort((a, b) => a.id - b.id);
+  const next: CaptionLine[] = [];
+  let prevEnd = 0;
+
+  for (const c of sorted) {
+    let start = parseSrtTimestamp(c.startTime);
+    let end = parseSrtTimestamp(c.endTime);
+
+    start = Math.max(start, prevEnd + gapSeconds);
+    end = Math.max(end, start + minDurationSeconds);
+
+    next.push({
+      ...c,
+      startTime: formatSrtTimestamp(start),
+      endTime: formatSrtTimestamp(end),
+    });
+
+    prevEnd = end;
+  }
+
+  return next;
+}
+
 const MOCK_CAPTIONS: CaptionLine[] = [
   { id: 1, startTime: '00:00:01,000', endTime: '00:00:04,000', text: 'Welcome to this audio presentation.' },
   { id: 2, startTime: '00:00:04,500', endTime: '00:00:08,000', text: 'Today we are going to discuss some important topics.' },
@@ -25,7 +78,8 @@ export function generateMockCaptions(): CaptionLine[] {
 }
 
 export function captionsToSRT(captions: CaptionLine[]): string {
-  return captions
+  const normalized = normalizeCaptionsForSrt(captions);
+  return normalized
     .map((c) => `${c.id}\n${c.startTime} --> ${c.endTime}\n${c.text}`)
     .join('\n\n');
 }

@@ -10,60 +10,68 @@ const useCases = [
   {
     icon: Youtube,
     title: 'YouTubers',
-    description: 'Add subtitles to your videos for better reach and accessibility.',
+    description: 'Add subtitles for better reach and accessibility.',
   },
   {
     icon: Mic,
     title: 'Podcasters',
-    description: 'Transcribe episodes into readable captions for show notes and SEO.',
+    description: 'Transcribe episodes for show notes and SEO.',
   },
   {
     icon: GraduationCap,
     title: 'Course Creators',
-    description: 'Make online courses accessible with accurate caption files.',
+    description: 'Make online courses accessible with captions.',
   },
   {
     icon: Building2,
     title: 'Agencies',
-    description: 'Scale caption production across multiple client projects efficiently.',
+    description: 'Scale caption production across client projects.',
   },
   {
     icon: Share2,
-    title: 'Social Media Creators',
-    description: 'Create engaging captions for reels, stories, and short-form content.',
+    title: 'Social Creators',
+    description: 'Captions for reels, stories, and shorts.',
   },
 ];
 
 export default function UseCasesSection() {
   return (
-    <section className="relative py-24 bg-slate-950 overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_rgba(6,182,212,0.10),_transparent_55%)]" />
-      <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        <div className="text-center mb-16">
-          <p className="text-sm font-semibold text-blue-300 tracking-wide uppercase mb-3">
-            Use Cases
-          </p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-white">
-            Built for creators
-          </h2>
-          <p className="text-slate-400 mt-4 max-w-lg mx-auto">
-            Whether you are a solo creator or an agency, Autocap fits your workflow.
-          </p>
-        </div>
+    <section className="relative py-28 overflow-hidden">
+      <div className="absolute inset-0 bg-[#0a0a0f]" />
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {useCases.map((uc, i) => (
-            <div
-              key={i}
-              className="group relative rounded-2xl p-6 border border-white/10 bg-white/[0.03] hover:bg-white/[0.05] hover:border-white/15 hover:shadow-lg hover:shadow-blue-500/10 transition-all duration-300"
-            >
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center mb-4 shadow-md shadow-blue-500/20 group-hover:scale-110 transition-transform duration-300">
-                <uc.icon size={22} className="text-white" />
+      <div className="relative max-w-5xl mx-auto px-4 sm:px-6">
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-12">
+          {/* Left — Sticky headline */}
+          <div className="lg:sticky lg:top-32 lg:max-w-xs shrink-0">
+            <p className="text-xs font-semibold text-violet-400 tracking-[0.2em] uppercase mb-4">
+              Use Cases
+            </p>
+            <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight leading-tight">
+              Built for
+              <br />
+              creators.
+            </h2>
+            <p className="text-white/35 mt-4 text-sm leading-relaxed">
+              Whether you're a solo creator or an agency, Autocap fits your workflow.
+            </p>
+          </div>
+
+          {/* Right — Cards */}
+          <div className="flex-1 grid sm:grid-cols-2 gap-4 lg:max-w-lg">
+            {useCases.map((uc, i) => (
+              <div
+                key={i}
+                className="group rounded-2xl p-5 border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/10 transition-all duration-500"
+              >
+                <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-blue-500 rounded-xl flex items-center justify-center mb-3 shadow-sm shadow-violet-500/10 group-hover:shadow-md group-hover:shadow-violet-500/20 group-hover:scale-105 transition-all duration-500">
+                  <uc.icon size={18} className="text-white" />
+                </div>
+                <h3 className="text-sm font-semibold text-white mb-1">{uc.title}</h3>
+                <p className="text-white/35 text-xs leading-relaxed">{uc.description}</p>
               </div>
-              <h3 className="text-base font-semibold text-white mb-2">{uc.title}</h3>
-              <p className="text-slate-400 text-sm leading-relaxed">{uc.description}</p>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </section>

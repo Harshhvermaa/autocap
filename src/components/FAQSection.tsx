@@ -5,27 +5,27 @@ const faqs = [
   {
     question: 'What audio formats are supported?',
     answer:
-      'Autocap supports MP3, WAV, and M4A audio formats. These cover the vast majority of audio files used in content creation, podcasting, and video production.',
+      'Autocap supports MP3, WAV, and M4A audio formats — covering the vast majority of audio files used in content creation, podcasting, and video production.',
   },
   {
     question: 'What is an SRT file?',
     answer:
-      'An SRT (SubRip Text) file is a standard subtitle format that contains sequentially numbered caption blocks with timestamps and text. It is compatible with YouTube, Vimeo, VLC, and virtually every video player and platform.',
+      'An SRT (SubRip Text) file is a standard subtitle format with sequentially numbered caption blocks and timestamps. It works with YouTube, Vimeo, VLC, and virtually every video player.',
   },
   {
     question: 'How accurate are the generated captions?',
     answer:
-      'Our AI engine delivers high-accuracy transcriptions suitable for most professional use cases. Accuracy depends on audio quality, background noise, and speaker clarity. Clean, well-recorded audio typically achieves 95%+ accuracy.',
+      'Our AI delivers high-accuracy transcriptions. Clean, well-recorded audio typically achieves 95%+ accuracy. Results depend on audio quality, background noise, and speaker clarity.',
   },
   {
-    question: 'Do I need to create an account to use Autocap?',
+    question: 'Do I need an account?',
     answer:
-      'Yes, you need a free account to generate captions. This helps us manage usage limits on the free plan and ensures your generated files are securely associated with your account.',
+      'Yes, a free account is needed to generate captions. This helps us manage usage limits and keep your files secure.',
   },
   {
-    question: 'What is the difference between Free and Pro plans?',
+    question: "What's the difference between Free and Pro?",
     answer:
-      'The Free plan lets you generate captions for up to 3 audio files per month. The Pro plan removes this limit entirely, giving you unlimited caption generation plus priority processing and email support.',
+      'Free gives you 3 audio files per month. Pro removes this limit entirely — unlimited generation, priority processing, and email support.',
   },
 ];
 
@@ -33,35 +33,37 @@ export default function FAQSection() {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   return (
-    <section className="relative py-24 bg-slate-950 overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(6,182,212,0.10),_transparent_55%)]" />
-      <div className="max-w-3xl mx-auto px-4 sm:px-6">
+    <section className="relative py-28 overflow-hidden">
+      <div className="absolute inset-0 bg-[#0a0a0f]" />
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
+
+      <div className="relative max-w-2xl mx-auto px-4 sm:px-6">
         <div className="text-center mb-16">
-          <p className="text-sm font-semibold text-blue-300 tracking-wide uppercase mb-3">
+          <p className="text-xs font-semibold text-violet-400 tracking-[0.2em] uppercase mb-4">
             FAQ
           </p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-white">
-            Frequently asked questions
+          <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
+            Questions? Answered.
           </h2>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-2">
           {faqs.map((faq, i) => (
             <div
               key={i}
-              className="border border-white/10 bg-white/[0.03] rounded-xl overflow-hidden transition-all duration-300 hover:bg-white/[0.05] hover:border-white/15"
+              className="border border-white/[0.06] bg-white/[0.02] rounded-xl overflow-hidden transition-all duration-300 hover:bg-white/[0.04] hover:border-white/10"
             >
               <button
                 onClick={() => setOpenIndex(openIndex === i ? null : i)}
-                className="w-full flex items-center justify-between px-6 py-5 text-left"
+                className="w-full flex items-center justify-between px-5 py-4 text-left"
               >
-                <span className="text-white font-medium text-sm pr-4">
+                <span className="text-white/80 font-medium text-sm pr-4">
                   {faq.question}
                 </span>
                 <ChevronDown
-                  size={18}
-                  className={`text-slate-400 shrink-0 transition-transform duration-300 ${
-                    openIndex === i ? 'rotate-180' : ''
+                  size={16}
+                  className={`text-white/25 shrink-0 transition-transform duration-300 ${
+                    openIndex === i ? 'rotate-180 text-violet-400' : ''
                   }`}
                 />
               </button>
@@ -70,7 +72,7 @@ export default function FAQSection() {
                   openIndex === i ? 'max-h-48' : 'max-h-0'
                 }`}
               >
-                <p className="px-6 pb-5 text-slate-400 text-sm leading-relaxed">
+                <p className="px-5 pb-4 text-white/35 text-sm leading-relaxed">
                   {faq.answer}
                 </p>
               </div>

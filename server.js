@@ -13,15 +13,19 @@ app.use(express.json());
 
 const upload = multer({ dest: 'uploads/' });
 
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true, build: SERVER_BUILD, model: HINGLISH_MODEL, pid: process.pid });
+});
+
 let openai;
 try {
   openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY || 'dummy_key',
   });
-} catch (e) {}
+} catch (e) { }
 
 const HINGLISH_MODEL = process.env.HINGLISH_MODEL || 'gpt-4.1-mini';
-const SERVER_BUILD = process.env.SERVER_BUILD || '2026-04-30';
+const SERVER_BUILD = '2026-05-02';
 
 const GLOSSARY_HINT = `Common words that may appear: ice cube, makeup, waxing, skin treatment, peel off, cool, pores, cotton, summer season, long lasting, facial, scrub, massage`;
 
@@ -37,22 +41,30 @@ function looksMostlyEnglish(text) {
   if (hasDevanagari(text)) return false;
   const lower = ` ${text.toLowerCase()} `;
   const hits = [
-    ' the ',
-    ' and ',
-    ' is ',
-    ' are ',
-    ' of ',
-    ' to ',
-    ' in ',
-    ' for ',
-    ' with ',
-    ' that ',
-    ' this ',
-    ' one ',
-    ' other ',
+    ' the ', ' and ', ' is ', ' are ', ' of ',
+    ' to ', ' in ', ' for ', ' with ', ' that ',
+    ' this ', ' one ', ' other ',
   ].reduce((acc, w) => (lower.includes(w) ? acc + 1 : acc), 0);
   return hits >= 3;
 }
+
+// ─── NEW: detect majority language from segments ────────────────────────────
+function detectLanguage(segments) {
+  const total = segments.length;
+  if (!total) return 'hi';
+
+  const hindiCount = segments.reduce(
+    (acc, s) => acc + (hasDevanagari(s.text) ? 1 : 0),
+    0,
+  );
+  const ratio = hindiCount / total;
+  const detected = ratio > 0.3 ? 'hi' : 'en';
+  console.log(
+    `[detectLanguage] devanagari=${hindiCount}/${total} ratio=${ratio.toFixed(2)} → '${detected}'`,
+  );
+  return detected;
+}
+// ────────────────────────────────────────────────────────────────────────────
 
 function formatTimestamp(seconds) {
   if (seconds < 0) seconds = 0.0;
@@ -66,14 +78,58 @@ function formatTimestamp(seconds) {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')},${String(millis).padStart(3, '0')}`;
 }
 
-function clamp(value, minimum = 0.0) {
-  return value > minimum ? value : minimum;
+function enforceNoOverlap(segments, gap = 0.06, minDuration = 0.6) {
+  const next = [];
+  let prevEnd = 0;
+  for (const seg of segments) {
+    let start = Number(seg.start);
+    let end = Number(seg.end);
+    if (!Number.isFinite(start)) start = prevEnd;
+    if (!Number.isFinite(end)) end = start + minDuration;
+
+    start = Math.max(start, prevEnd + gap);
+    end = Math.max(end, start + minDuration);
+
+    next.push({ ...seg, start, end });
+    prevEnd = end;
+  }
+  return next;
 }
 
-function adjustTiming(start, end) {
-  start = clamp(start - 0.32);
-  end = Math.max(start + 0.60, end + 0.12);
-  return { start, end };
+function mergeTinySegments(
+  segments,
+  { minDuration = 0.9, maxCombinedDuration = 3.8, maxChars = 70 } = {},
+) {
+  if (!segments.length) return [];
+
+  const merged = [];
+  let i = 0;
+
+  while (i < segments.length) {
+    const current = { ...segments[i] };
+    const duration = current.end - current.start;
+
+    if (i < segments.length - 1) {
+      const next = segments[i + 1];
+      const combinedDuration = next.end - current.start;
+      const combinedText = normalizeText(`${current.text} ${next.text}`);
+
+      if (
+        duration < minDuration &&
+        combinedDuration <= maxCombinedDuration &&
+        combinedText.length <= maxChars
+      ) {
+        current.end = next.end;
+        current.text = combinedText;
+        i += 1;
+      }
+    }
+
+    merged.push(current);
+    i += 1;
+  }
+
+  return merged;
 }
 
 function splitTwoLines(text, maxCharsPerLine = 34) {
@@ -102,127 +158,214 @@ function splitTwoLines(text, maxCharsPerLine = 34) {
   }
 
   const midpoint = Math.floor(words.length / 2);
-  const left = words.slice(0, midpoint).join(' ');
-  const right = words.slice(midpoint).join(' ');
-  return `${left}\n${right}`;
+  return `${words.slice(0, midpoint).join(' ')}\n${words.slice(midpoint).join(' ')}`;
 }
 
-async function transliterateBatch(batch) {
-  // Always convert to Roman Hinglish.
-  // If Whisper produced English-looking text (likely translation), we convert it back to Hinglish.
-  const payload = batch.map((seg, idx) => `${idx + 1}|||${seg.text}`).join('\n');
+function protectEnglishTokens(text) {
+  const map = new Map();
+  let i = 0;
+  const replaced = text.replace(
+    /\b[A-Za-z][A-Za-z0-9''\-]*(?:\s+[A-Za-z][A-Za-z0-9''\-]*)*\b/g,
+    (match) => {
+      const words = match.trim().split(/\s+/).filter(Boolean);
+      if (words.length > 3 || match.length > 24) return match;
+      const key = `[[EN${i++}]]`;
+      map.set(key, match);
+      return key;
+    },
+  );
+  return { text: replaced, map };
+}
 
-  const prompt = `You are a strict subtitle converter.
+function restoreEnglishTokens(text, map) {
+  let out = text;
+  for (const [key, value] of map.entries()) {
+    const tokenId = key.replace(/^\[\[|\]\]$/g, '');
+    const patterns = [
+      key,
+      key.replace(/\[\[/g, '__').replace(/\]\]/g, '__'),
+      tokenId,
+      `[[ ${tokenId} ]]`,
+      `__ ${tokenId} __`,
+    ];
+    for (const p of patterns) out = out.split(p).join(value);
+  }
+  return out;
+}
+
+// ─── UPDATED: accepts sourceLang param ──────────────────────────────────────
+async function transliterateBatchToHinglish(batch, sourceLang = 'hi') {
+  // protectEnglishTokens is only useful for Hindi audio (to preserve English words
+  // embedded in Devanagari text). For English audio, applying it locks ALL words
+  // into placeholders and leaves GPT nothing to Hinglishify — so skip it.
+  const useProtection = sourceLang === 'hi';
+  const protections = batch.map((seg) =>
+    useProtection ? protectEnglishTokens(seg.text) : { text: seg.text, map: new Map() },
+  );
+  const payload = protections.map((p, idx) => `${idx + 1}|||${p.text}`).join('\n');
+
+  let prompt;
+
+  if (sourceLang === 'hi') {
+    // Hindi/Devanagari → Roman Hinglish (strict transliteration, no paraphrase)
+    prompt = `
+You are a strict subtitle transliterator.
 
 Task:
-Convert each line into natural Roman Hinglish subtitles (Latin letters).
+Convert each line into natural Roman Hinglish.
 
-Rules:
-1) Output MUST be Roman Hinglish (Latin letters). Never output Devanagari.
-2) If the input contains Hindi in Devanagari, transliterate it (do NOT translate to English).
-3) If the input is English (or English-heavy), convert it into natural Roman Hinglish while preserving meaning.
-4) Keep English brand/product terms as-is (e.g., makeup, brush, pores, ice cube).
-5) Do NOT add new information. Do NOT summarize.
-6) Return exactly one output line for each input line.
-7) Keep the same numbering before |||.
-8) Output only plain text lines in the exact format: number|||converted text.
+Very important rules:
+1. Transliterate only. Do NOT summarize.
+2. Do NOT paraphrase.
+3. Do NOT improve grammar.
+4. Do NOT change meaning.
+5. Keep English words exactly as they are (and keep placeholders like [[EN0]] unchanged).
+6. Convert Hindi/Urdu words into simple Roman script.
+7. Preserve brand/product/style words if they are already in English.
+8. Return exactly one output line for each input line.
+9. Keep the same numbering before |||.
+10. Output only plain text lines in the same format: number|||converted text
 
 Examples:
 1|||आज हम एक नई app के बारे में बात करेंगे
 1|||aaj hum ek nayi app ke baare mein baat karenge
 
-2|||Mainly makeup brushes are of two types. One is real hair brush and the other is synthetic hair brush.
-2|||mainly makeup brushes do types ke hote hain. ek real hair brush hota hai aur dusra synthetic hair brush hota hai.
+2|||इससे हमारे pores close हो जाएंगे
+2|||isse hamare pores close ho jayenge
+
+3|||यह बहुत cool और refreshing feel देता है
+3|||yeh bahut cool aur refreshing feel deta hai
 
 Input lines:
-${payload}`;
+${payload}
+    `.trim();
+  } else {
+    // English → casual Hinglish-flavored Roman (for English audio)
+    prompt = `
+You are a subtitle style converter for English content targeted at Hindi-speaking audiences.
 
-  let output = '';
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const response = await openai.chat.completions.create({
-      model: HINGLISH_MODEL,
-      temperature: 0,
-      messages: [
-        {
-          role: 'user',
-          content:
-            attempt === 0
-              ? prompt
-              : `${prompt}\n\nReminder: Do NOT translate to English. Output ONLY numbered lines in the exact format.`,
-        },
-      ],
-    });
-    output = response.choices[0].message.content?.trim() || '';
-    if (output.includes('|||')) break;
+Task:
+Convert each English subtitle line into a casual, Hinglish-flavored Roman style.
+The output should feel like how a bilingual Hindi-English speaker would naturally say it.
+
+Rules:
+1. Keep the core meaning exactly the same. Do NOT paraphrase or summarize.
+2. You may naturally add small Hindi filler words where they fit:
+   "toh", "yaar", "na", "hai", "matlab", "dekho", "iska", "aur" etc.
+   But don't force it — if the English line already sounds natural and casual, keep it mostly as-is.
+3. Do NOT translate entire sentences to Hindi — output must be Roman script only.
+4. Keep placeholders like [[EN0]] unchanged.
+5. Keep brand names, product names, and technical terms unchanged.
+6. Return exactly one output line per input line, same numbering before |||.
+7. Output only: number|||converted text
+
+Examples:
+1|||This product keeps your skin cool all day long.
+1|||yeh product aapki skin ko poore din cool rakhta hai.
+
+2|||Today I'm going to show you something amazing.
+2|||toh aaj main aapko kuch amazing dikhane wala hoon.
+
+3|||Make sure to apply it evenly on your face.
+3|||isse apne face pe evenly apply karo, okay?
+
+4|||It works great for oily skin too.
+4|||oily skin ke liye bhi yeh kaafi achha kaam karta hai.
+
+Input lines:
+${payload}
+    `.trim();
   }
 
-  const lines = output.split('\n').map(l => l.trim()).filter(l => l);
+  const response = await openai.responses.create({
+    model: HINGLISH_MODEL,
+    input: prompt,
+  });
+
+  const output = (response.output_text || '').trim();
+  const lines = output.split('\n').map((l) => l.trim()).filter(Boolean);
 
   const parsed = {};
   for (const line of lines) {
-    if (line.includes('|||')) {
-      const [left, ...rest] = line.split('|||');
-      const right = normalizeText(rest.join('|||'));
-      if (!isNaN(parseInt(left.trim()))) {
-        parsed[parseInt(left.trim())] = right;
-      }
-    }
+    if (!line.includes('|||')) continue;
+    const [left, ...rest] = line.split('|||');
+    const right = normalizeText(rest.join('|||'));
+    const id = parseInt(left.trim(), 10);
+    if (!Number.isNaN(id)) parsed[id] = right;
   }
 
-  return batch.map((seg, idx) => parsed[idx + 1] || seg.text);
+  return batch.map((seg, idx) => {
+    const protectedInput = protections[idx];
+    const converted = parsed[idx + 1] || seg.text;
+    return restoreEnglishTokens(converted, protectedInput.map);
+  });
 }
+// ────────────────────────────────────────────────────────────────────────────
 
+// ─── UPDATED: two-pass transcription + language-aware conversion ─────────────
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
+  let audioPath = null;
+
   try {
     if (!process.env.OPENAI_API_KEY) {
       return res.status(500).json({ error: 'OPENAI_API_KEY is not set in .env' });
     }
-
     if (!req.file) {
       return res.status(400).json({ error: 'No audio file uploaded' });
     }
 
-    // Rename file to include original extension so OpenAI can detect format
     const originalName = req.file.originalname;
     const ext = originalName.substring(originalName.lastIndexOf('.'));
-    const audioPath = req.file.path + (ext || '.mp3');
+    audioPath = req.file.path + (ext || '.mp3');
     fs.renameSync(req.file.path, audioPath);
 
-    // Step 1: Transcribe
-    const result = await openai.audio.transcriptions.create({
+    // ── PASS 1: Auto-detect transcription (NO language hint — let Whisper decide) ──
+    console.log('[transcribe] Pass 1: auto-detect transcription...');
+    const pass1 = await openai.audio.transcriptions.create({
       model: 'whisper-1',
       file: fs.createReadStream(audioPath),
-      language: 'hi',
-      prompt: `Transcribe (do NOT translate) this audio. It is mostly Hindi/Hinglish in informal spoken style. Write Hindi words in Devanagari script (हिन्दी) where possible. Keep English words, product names, and common beauty/skincare terms as spoken. Prefer words like: ${GLOSSARY_HINT}`,
+      // ⚠️  Do NOT set `language` here — Whisper must detect it freely.
+      // Setting language:'hi' here was causing English audio to be mis-transcribed.
+      prompt: `Transcribe this audio exactly as spoken. Do NOT translate. It may be Hindi, English, or Hinglish. Write Hindi words in Devanagari (हिन्दी) where possible, keep English words in Latin letters. Prefer words like: ${GLOSSARY_HINT}`,
       response_format: 'verbose_json',
       timestamp_granularities: ['segment'],
       temperature: 0,
     });
 
-    const rawSegments = result.segments || [];
-    const segments = [];
-    
-    for (const seg of rawSegments) {
-      const text = normalizeText(seg.text);
-      if (text) {
-        segments.push({ start: seg.start, end: seg.end, text });
-      }
+    let segments = (pass1.segments || [])
+      .map((seg) => ({ start: seg.start, end: seg.end, text: normalizeText(seg.text) }))
+      .filter((s) => s.text);
+
+    // ── Language detection ────────────────────────────────────────────────
+    const detectedLang = detectLanguage(segments);
+
+    // ── PASS 2: Re-transcribe with correct language hint if English ───────
+    if (detectedLang === 'en') {
+      console.log('[transcribe] Pass 2: re-transcribing with language=en for better accuracy...');
+      const pass2 = await openai.audio.transcriptions.create({
+        model: 'whisper-1',
+        file: fs.createReadStream(audioPath),
+        language: 'en',
+        prompt: `This is English audio. Transcribe accurately. Keep brand names as spoken. Prefer words like: ${GLOSSARY_HINT}`,
+        response_format: 'verbose_json',
+        timestamp_granularities: ['segment'],
+        temperature: 0,
+      });
+
+      segments = (pass2.segments || [])
+        .map((seg) => ({ start: seg.start, end: seg.end, text: normalizeText(seg.text) }))
+        .filter((s) => s.text);
     }
 
-    const devanagariCount = segments.reduce(
-      (acc, s) => acc + (hasDevanagari(s.text) ? 1 : 0),
-      0,
-    );
-    const mostlyEnglishCount = segments.reduce(
-      (acc, s) => acc + (looksMostlyEnglish(s.text) ? 1 : 0),
-      0,
-    );
+    const devanagariCount = segments.reduce((acc, s) => acc + (hasDevanagari(s.text) ? 1 : 0), 0);
+    const mostlyEnglishCount = segments.reduce((acc, s) => acc + (looksMostlyEnglish(s.text) ? 1 : 0), 0);
     console.log(
-      `[transcribe] build=${SERVER_BUILD} segments=${segments.length} devanagari=${devanagariCount} mostlyEnglish=${mostlyEnglishCount} model=${HINGLISH_MODEL}`,
+      `[transcribe] build=${SERVER_BUILD} lang=${detectedLang} segments=${segments.length} devanagari=${devanagariCount} mostlyEnglish=${mostlyEnglishCount} model=${HINGLISH_MODEL}`,
     );
 
-    // Step 2: Convert to Hinglish
-    const batchSize = 20;
+    // ── Step 2: Convert to Roman Hinglish (language-aware) ───────────────
+    console.log(`[transcribe] Converting to Roman Hinglish (sourceLang=${detectedLang})...`);
+    const batchSize = 25;
     const batches = [];
     for (let i = 0; i < segments.length; i += batchSize) {
       batches.push(segments.slice(i, i + batchSize));
@@ -230,8 +373,10 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 
     const convertedSegments = [];
     for (let i = 0; i < batches.length; i++) {
+      console.log(`[transcribe] batch ${i + 1}/${batches.length}`);
       const batch = batches[i];
-      const convertedLines = await transliterateBatch(batch);
+      // Pass detectedLang so correct prompt is used
+      const convertedLines = await transliterateBatchToHinglish(batch, detectedLang);
       for (let j = 0; j < batch.length; j++) {
         convertedSegments.push({
           start: batch[j].start,
@@ -241,28 +386,36 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
       }
     }
 
-    // Step 3: Build frontend response
-    const captions = convertedSegments.map((seg, index) => {
-      const { start, end } = adjustTiming(seg.start, seg.end);
-      const text = splitTwoLines(normalizeText(seg.text));
-      return {
-        id: index + 1,
-        startTime: formatTimestamp(start),
-        endTime: formatTimestamp(end),
-        text: text
-      };
-    });
+    // ── Step 3: Readability + timing ─────────────────────────────────────
+    const merged = mergeTinySegments(
+      convertedSegments.map((s) => ({
+        start: Number(s.start),
+        end: Number(s.end),
+        text: normalizeText(s.text),
+      })),
+    );
+    const splitForReadability = merged.map((seg) => ({
+      ...seg,
+      text: splitTwoLines(seg.text),
+    }));
+    const nonOverlapping = enforceNoOverlap(splitForReadability);
+    const captions = nonOverlapping.map((seg, index) => ({
+      id: index + 1,
+      startTime: formatTimestamp(seg.start),
+      endTime: formatTimestamp(seg.end),
+      text: seg.text,
+    }));
 
-    // cleanup
     fs.unlinkSync(audioPath);
-
     res.json({ captions });
+
   } catch (error) {
     console.error('Transcription error:', error);
-    if (req.file && req.file.path) fs.unlinkSync(req.file.path);
+    if (audioPath && fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
     res.status(500).json({ error: error.message });
   }
 });
+// ────────────────────────────────────────────────────────────────────────────
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {

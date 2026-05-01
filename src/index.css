@@ -19,11 +19,11 @@
   }
 
   .animate-fade-up {
-    animation: fadeUp 0.6s ease-out;
+    animation: fadeUp 0.6s ease-out both;
   }
 
   .animate-fade-in {
-    animation: fadeIn 0.5s ease-out;
+    animation: fadeIn 0.5s ease-out both;
   }
 }
 
@@ -41,7 +41,7 @@
 @keyframes fadeUp {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(24px);
   }
   to {
     opacity: 1;
@@ -56,6 +56,35 @@
   to {
     opacity: 1;
   }
+}
+
+/* Animated gradient orbs */
+@keyframes float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -20px) scale(1.05); }
+  66% { transform: translate(-20px, 15px) scale(0.95); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+@keyframes waveform {
+  0%, 100% { height: 12px; }
+  50% { height: 28px; }
+}
+
+.animate-float {
+  animation: float 8s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: float 10s ease-in-out 2s infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
 }
 
 /* Custom scrollbar */
@@ -74,4 +103,25 @@
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+/* Waveform bars */
+.waveform-bar {
+  animation: waveform 1.2s ease-in-out infinite;
+}
+.waveform-bar:nth-child(2) { animation-delay: 0.1s; }
+.waveform-bar:nth-child(3) { animation-delay: 0.2s; }
+.waveform-bar:nth-child(4) { animation-delay: 0.3s; }
+.waveform-bar:nth-child(5) { animation-delay: 0.15s; }
+.waveform-bar:nth-child(6) { animation-delay: 0.25s; }
+.waveform-bar:nth-child(7) { animation-delay: 0.35s; }
+
+/* Noise texture overlay */
+.noise-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  pointer-events: none;
 }

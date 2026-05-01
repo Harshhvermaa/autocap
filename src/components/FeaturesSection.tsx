@@ -10,66 +10,71 @@ import {
 const features = [
   {
     icon: Zap,
-    title: 'Fast Caption Generation',
-    description: 'Get your captions in seconds, not hours. Our AI processes audio at lightning speed.',
+    title: 'Blazing Fast',
+    description: 'Get captions in seconds. No queues, no waiting.',
   },
   {
     icon: Target,
-    title: 'Accurate Transcription',
-    description: 'Industry-leading accuracy ensures your captions match the spoken content precisely.',
+    title: 'High Accuracy',
+    description: 'Industry-leading transcription that matches spoken content precisely.',
   },
   {
     icon: FileDown,
-    title: 'SRT Download',
-    description: 'Download standard .SRT subtitle files compatible with all major video platforms.',
+    title: 'SRT Export',
+    description: 'Standard .SRT format compatible with YouTube, Premiere, and more.',
   },
   {
     icon: Music,
-    title: 'Multi-Format Audio Support',
-    description: 'Upload MP3, WAV, or M4A files. We handle the conversion automatically.',
+    title: 'Multi-Format',
+    description: 'Upload MP3, WAV, or M4A — we handle the rest.',
   },
   {
     icon: Eye,
-    title: 'Clean Caption Preview',
-    description: 'Review and verify your generated captions before downloading the final file.',
+    title: 'Live Preview',
+    description: 'Review and edit every caption line before downloading.',
   },
   {
     icon: Smartphone,
-    title: 'Mobile Friendly',
-    description: 'Generate captions on any device. Our platform works seamlessly on mobile and desktop.',
+    title: 'Works Everywhere',
+    description: 'Desktop or mobile — generate captions from any device.',
   },
 ];
 
 export default function FeaturesSection() {
   return (
-    <section className="relative py-24 bg-slate-950 overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(59,130,246,0.10),_transparent_55%)]" />
-      <div className="max-w-6xl mx-auto px-4 sm:px-6">
+    <section className="relative py-28 overflow-hidden">
+      <div className="absolute inset-0 bg-[#0a0a0f]" />
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
+
+      {/* Soft accent glow */}
+      <div className="absolute top-[30%] right-[-10%] w-[400px] h-[400px] rounded-full bg-violet-600/[0.05] blur-[100px]" />
+
+      <div className="relative max-w-5xl mx-auto px-4 sm:px-6">
         <div className="text-center mb-16">
-          <p className="text-sm font-semibold text-blue-300 tracking-wide uppercase mb-3">
+          <p className="text-xs font-semibold text-violet-400 tracking-[0.2em] uppercase mb-4">
             Features
           </p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-white">
+          <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
             Everything you need
           </h2>
-          <p className="text-slate-400 mt-4 max-w-lg mx-auto">
-            Powerful tools to make caption generation effortless and accurate.
+          <p className="text-white/35 mt-4 max-w-md mx-auto text-sm">
+            Powerful tools wrapped in a simple interface.
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {features.map((feature, i) => (
             <div
               key={i}
-              className="group rounded-2xl p-6 border border-white/10 bg-white/[0.03] hover:bg-white/[0.05] hover:border-white/15 hover:shadow-lg hover:shadow-blue-500/10 transition-all duration-300"
+              className="group rounded-2xl p-6 border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/10 transition-all duration-500"
             >
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500/20 to-cyan-500/10 border border-white/10 rounded-xl flex items-center justify-center mb-4 group-hover:from-blue-500/25 group-hover:to-cyan-500/15 transition-colors">
-                <feature.icon size={22} className="text-blue-300" />
+              <div className="w-10 h-10 bg-gradient-to-br from-violet-500/15 to-blue-500/10 border border-white/[0.08] rounded-xl flex items-center justify-center mb-4 group-hover:from-violet-500/25 group-hover:to-blue-500/15 transition-all duration-500">
+                <feature.icon size={18} className="text-violet-300" />
               </div>
-              <h3 className="text-base font-semibold text-white mb-2">
+              <h3 className="text-sm font-semibold text-white mb-1.5">
                 {feature.title}
               </h3>
-              <p className="text-slate-400 text-sm leading-relaxed">
+              <p className="text-white/35 text-sm leading-relaxed">
                 {feature.description}
               </p>
             </div>

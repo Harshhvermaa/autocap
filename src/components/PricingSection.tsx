@@ -13,7 +13,7 @@ const plans = [
       '3 audio files per month',
       'MP3, WAV, M4A support',
       'SRT file download',
-      'Caption preview',
+      'Caption preview & editing',
     ],
     cta: 'Start Free',
     highlighted: false,
@@ -22,16 +22,16 @@ const plans = [
     name: 'Pro',
     price: '$12',
     period: '/month',
-    description: 'For creators who need unlimited captions',
+    description: 'Unlimited captions for serious creators',
     features: [
       'Unlimited audio files',
-      'MP3, WAV, M4A support',
+      'All audio formats',
       'SRT file download',
-      'Caption preview',
+      'Caption preview & editing',
       'Priority processing',
       'Email support',
     ],
-    cta: 'Start Generating',
+    cta: 'Get Pro',
     highlighted: true,
   },
 ];
@@ -47,80 +47,63 @@ export default function PricingSection() {
   };
 
   return (
-    <section className="relative py-24 bg-slate-950 overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_rgba(59,130,246,0.10),_transparent_55%)]" />
-      <div className="max-w-5xl mx-auto px-4 sm:px-6">
+    <section className="relative py-28 overflow-hidden">
+      <div className="absolute inset-0 bg-[#0a0a0f]" />
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
+
+      {/* Accent glow */}
+      <div className="absolute top-[20%] left-[20%] w-[300px] h-[300px] rounded-full bg-violet-600/[0.04] blur-[80px]" />
+
+      <div className="relative max-w-4xl mx-auto px-4 sm:px-6">
         <div className="text-center mb-16">
-          <p className="text-sm font-semibold text-blue-300 tracking-wide uppercase mb-3">
+          <p className="text-xs font-semibold text-violet-400 tracking-[0.2em] uppercase mb-4">
             Pricing
           </p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-white">
-            Simple, transparent pricing
+          <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
+            Simple pricing
           </h2>
-          <p className="text-slate-400 mt-4 max-w-lg mx-auto">
-            Start free and upgrade when you need more.
+          <p className="text-white/35 mt-4 max-w-md mx-auto text-sm">
+            Start free. Upgrade when you need more.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8 max-w-3xl mx-auto">
+        <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
           {plans.map((plan, i) => (
             <div
               key={i}
-              className={`relative rounded-2xl p-8 transition-all duration-300 ${
+              className={`relative rounded-2xl p-7 transition-all duration-500 ${
                 plan.highlighted
-                  ? 'bg-gradient-to-br from-blue-600 to-cyan-500 text-white shadow-xl shadow-blue-500/20 scale-[1.02]'
-                  : 'bg-white/[0.03] border border-white/10 hover:bg-white/[0.05] hover:border-white/15 hover:shadow-lg hover:shadow-blue-500/10'
+                  ? 'bg-gradient-to-br from-violet-600/90 to-blue-600/90 text-white border border-violet-500/30 shadow-xl shadow-violet-500/10'
+                  : 'bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.05] hover:border-white/10'
               }`}
             >
               {plan.highlighted && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-white text-blue-600 text-xs font-bold rounded-full shadow-sm">
-                  MOST POPULAR
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-white text-violet-600 text-[10px] font-bold rounded-full shadow-sm tracking-wide uppercase">
+                  Popular
                 </span>
               )}
-              <h3
-                className={`text-lg font-semibold mb-1 ${
-                  plan.highlighted ? 'text-white' : 'text-white'
-                }`}
-              >
+              <h3 className="text-lg font-semibold text-white mb-1">
                 {plan.name}
               </h3>
-              <div className="flex items-baseline gap-1 mb-2">
-                <span
-                  className={`text-4xl font-bold ${
-                    plan.highlighted ? 'text-white' : 'text-white'
-                  }`}
-                >
+              <div className="flex items-baseline gap-1 mb-1">
+                <span className="text-3xl font-bold text-white">
                   {plan.price}
                 </span>
-                <span
-                  className={`text-sm ${
-                    plan.highlighted ? 'text-white/70' : 'text-slate-400'
-                  }`}
-                >
+                <span className={`text-sm ${plan.highlighted ? 'text-white/60' : 'text-white/30'}`}>
                   {plan.period}
                 </span>
               </div>
-              <p
-                className={`text-sm mb-6 ${
-                  plan.highlighted ? 'text-white/80' : 'text-slate-400'
-                }`}
-              >
+              <p className={`text-sm mb-6 ${plan.highlighted ? 'text-white/70' : 'text-white/30'}`}>
                 {plan.description}
               </p>
-              <ul className="space-y-3 mb-8">
+              <ul className="space-y-2.5 mb-7">
                 {plan.features.map((feature, j) => (
-                  <li key={j} className="flex items-center gap-3 text-sm">
+                  <li key={j} className="flex items-center gap-2.5 text-sm">
                     <Check
-                      size={16}
-                      className={
-                        plan.highlighted ? 'text-white' : 'text-blue-300'
-                      }
+                      size={14}
+                      className={plan.highlighted ? 'text-white/80' : 'text-violet-400'}
                     />
-                    <span
-                      className={
-                        plan.highlighted ? 'text-white/90' : 'text-slate-300'
-                      }
-                    >
+                    <span className={plan.highlighted ? 'text-white/80' : 'text-white/50'}>
                       {feature}
                     </span>
                   </li>
@@ -128,14 +111,14 @@ export default function PricingSection() {
               </ul>
               <button
                 onClick={handleCta}
-                className={`w-full py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all duration-300 ${
+                className={`w-full py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all duration-300 ${
                   plan.highlighted
-                    ? 'bg-white text-blue-600 hover:bg-gray-50 shadow-lg'
-                    : 'bg-white/5 border border-white/10 text-white hover:bg-white/10'
+                    ? 'bg-white text-violet-600 hover:bg-gray-50 shadow-lg'
+                    : 'bg-white/[0.04] border border-white/10 text-white/70 hover:bg-white/[0.08] hover:text-white'
                 }`}
               >
                 {plan.cta}
-                <ArrowRight size={16} />
+                <ArrowRight size={14} />
               </button>
             </div>
           ))}
