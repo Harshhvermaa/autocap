@@ -64,10 +64,12 @@ def transcribe_with_timestamps(client: OpenAI, audio_path: str) -> List[Segment]
         result = client.audio.transcriptions.create(
             model="whisper-1",
             file=audio_file,
-            language="hi",
+            # Do NOT hardcode language='hi' — let Whisper auto-detect
+            # so English audio is also handled correctly
             prompt=(
-                "This audio is mostly Hindi/Hinglish in informal spoken style. "
-                "Keep brand names and English words as spoken. "
+                "Transcribe this audio exactly as spoken. Do NOT translate. "
+                "It may be Hindi, English, or Hinglish. "
+                "Write Hindi words in Devanagari where possible, keep English words in Latin letters. "
                 f"Prefer words like: {GLOSSARY_HINT}"
             ),
             response_format="verbose_json",
@@ -113,13 +115,18 @@ def transliterate_batch_to_hinglish(
     prompt = f"""You are a strict subtitle transliterator.
 
 Task:
-Convert each line into natural Roman Hinglish.
+Convert each subtitle line into natural Roman Hinglish.
 
 Rules (must follow):
-1) Transliterate only. Do NOT translate.
-2) Do NOT summarize. Do NOT paraphrase.
-3) Do NOT improve grammar or style.
-4) Keep English words exactly as-is.
+1) If the input is Hindi/Devanagari: transliterate to Roman Hinglish. Do NOT translate.
+2) If the input is already in English (Roman letters): PRESERVE the words exactly as-is.
+   You may ONLY optionally add small Hindi filler words at natural boundaries:
+   "toh", "na", "yaar", "bhai", "dekho", "matlab", "okay?" — only if they fit naturally.
+   NEVER replace an English word with its Hindi equivalent.
+   Wrong: "keeps" -> "rakhta hai"  |  Correct: keep "keeps"
+   Wrong: "amazing" -> "kamaal"    |  Correct: keep "amazing"
+3) Do NOT summarize, paraphrase, or change meaning.
+4) Keep English words, brand names, and product names exactly as they are.
 5) Return exactly ONE output line per input line.
 6) Keep numbering exactly the same: number|||converted text
 7) Output ONLY the converted lines (no headings, no explanation).
